@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id              String   @id @default(uuid())
+  email           String   @unique
+  passwordHash    String?  @map("password_hash")
+  mustSetPassword Boolean  @default(true) @map("must_set_password")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_users")
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+model MenuCategory {
+  id           String     @id @default(uuid())
+  name         String
+  displayOrder Int        @default(0) @map("display_order")
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  items        MenuItem[]
+
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id           String       @id @default(uuid())
+  categoryId   String       @map("category_id")
+  category     MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  price        Decimal
+  pricingType  String       @default("fixed") @map("pricing_type")
+  servesCount  Int?         @map("serves_count")
+  imageUrl     String?      @map("image_url")
+  active       Boolean      @default(true)
+  displayOrder Int          @default(0) @map("display_order")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  orderItems   OrderItem[]
+
+  @@map("menu_items")
+}
+
+model Order {
+  id              String      @id @default(uuid())
+  status          String      @default("new")
+  customerName    String      @map("customer_name")
+  customerEmail   String      @map("customer_email")
+  customerPhone   String      @map("customer_phone")
+  customerAddress String?     @map("customer_address")
+  fulfillmentType String      @map("fulfillment_type")
+  scheduledDate   DateTime    @map("scheduled_date")
+  scheduledTime   String      @map("scheduled_time")
+  subtotal        Decimal
+  deliveryFee     Decimal     @default(0) @map("delivery_fee")
+  total           Decimal
+  notes           String?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  items           OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String    @id @default(uuid())
+  orderId     String    @map("order_id")
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId  String?   @map("menu_item_id")
+  menuItem    MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  itemName    String    @map("item_name")
+  itemPrice   Decimal   @map("item_price")
+  pricingType String    @map("pricing_type")
+  quantity    Int
+  guestCount  Int?      @map("guest_count")
+  lineTotal   Decimal   @map("line_total")
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("order_items")
+}
