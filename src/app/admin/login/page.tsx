@@ -60,7 +60,8 @@ export default function AdminLoginPage() {
         throw new Error(data.error || 'Login failed')
       }
 
-      router.push('/admin/orders')
+      // Use window.location for hard refresh to load server-side session state
+      window.location.href = '/admin/orders'
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
       setIsLoading(false)
@@ -101,7 +102,8 @@ export default function AdminLoginPage() {
         throw new Error(data.error || 'Failed to set password')
       }
 
-      router.push('/admin/orders')
+      // Use window.location for hard refresh to load server-side session state
+      window.location.href = '/admin/orders'
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to set password')
       setIsLoading(false)
