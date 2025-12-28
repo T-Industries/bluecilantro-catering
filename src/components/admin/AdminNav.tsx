@@ -40,7 +40,8 @@ export function AdminNav({ email }: AdminNavProps) {
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/admin/login')
+    // Use window.location for hard refresh to clear server-side session state
+    window.location.href = '/admin/login'
   }
 
   return (
