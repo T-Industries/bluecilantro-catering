@@ -416,6 +416,46 @@ npx prisma db seed
 
 ---
 
+## Best Practices / Common Pitfalls
+
+### Next.js App Router Cache Revalidation
+
+**Problem:** Server Components cache their data by default. When data is modified via API routes (e.g., admin panel), the cached pages don't update automatically.
+
+**Solution:** Always call `revalidatePath('/')` (or the relevant path) in API routes that modify data displayed on server-rendered pages.
+
+```typescript
+import { revalidatePath } from 'next/cache'
+
+// In your POST/PUT/DELETE handlers:
+await prisma.menuItem.create({ ... })
+revalidatePath('/')  // Invalidate cache for affected pages
+return NextResponse.json(item)
+```
+
+**When to use:**
+- Any API route that creates, updates, or deletes data shown on public pages
+- Menu item/category changes → `revalidatePath('/')`
+- Order status changes → `revalidatePath('/track')`
+- Settings changes → `revalidatePath('/')`
+
+### Stripe Redirect URLs
+
+**Problem:** Stripe success/cancel URLs default to localhost if `NEXT_PUBLIC_APP_URL` is not set.
+
+**Solution:** Always set `NEXT_PUBLIC_APP_URL` in production environment variables:
+```
+NEXT_PUBLIC_APP_URL=https://yourdomain.com
+```
+
+### Email Timing with Payments
+
+**Problem:** Sending confirmation emails before payment is completed leads to confusion if payment fails.
+
+**Solution:** For Stripe payments, send emails in the webhook handler (`checkout.session.completed`) not in the checkout API. Only send immediately for bypass/test orders.
+
+---
+
 ## Future Enhancements
 
 - [x] Stripe payment integration (with manual capture)
