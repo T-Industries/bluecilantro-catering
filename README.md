@@ -99,8 +99,10 @@ SESSION_SECRET="your-secret-key-min-32-characters"
 SMTP2GO_API_KEY="your-smtp2go-api-key"
 SMTP2GO_SENDER_EMAIL="your-verified-sender@domain.com"
 
-# App URL (optional, for email links)
-NEXT_PUBLIC_APP_URL="https://your-domain.com"
+# App URL (REQUIRED for production - used for Stripe success/cancel redirects)
+# Local: http://localhost:3000
+# Production: https://yourdomain.com
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
 
 # Stripe Payment Integration
 STRIPE_SECRET_KEY="sk_test_..."
@@ -146,6 +148,7 @@ Add the following environment variables in Vercel's project settings:
 - `SESSION_SECRET` - Random 32+ character string
 - `SMTP2GO_API_KEY` - Your SMTP2Go API key
 - `SMTP2GO_SENDER_EMAIL` - Verified sender email
+- `NEXT_PUBLIC_APP_URL` - Your production URL (e.g., `https://bluecilantro24.ca`) **REQUIRED for Stripe redirects**
 - `STRIPE_SECRET_KEY` - Stripe secret key (`sk_live_...`)
 - `STRIPE_WEBHOOK_SECRET` - Stripe webhook signing secret (`whsec_...`)
 - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` - Stripe publishable key (`pk_live_...`)

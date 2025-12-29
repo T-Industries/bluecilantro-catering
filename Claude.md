@@ -78,6 +78,7 @@ DATABASE_URL="file:./dev.db"
 SESSION_SECRET="your-secret-key-min-32-chars-here"
 SMTP2GO_API_KEY="your-smtp2go-api-key"
 SMTP2GO_SENDER_EMAIL="your-verified-sender@domain.com"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
 STRIPE_SECRET_KEY="sk_test_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
@@ -172,6 +173,7 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
    | `SESSION_SECRET` | Generate: `openssl rand -base64 32` |
    | `SMTP2GO_API_KEY` | Your SMTP2Go API key |
    | `SMTP2GO_SENDER_EMAIL` | `orders@bluecilantro.ca` (must be verified) |
+   | `NEXT_PUBLIC_APP_URL` | `https://bluecilantro24.ca` **(REQUIRED for Stripe redirects)** |
    | `STRIPE_SECRET_KEY` | `sk_live_...` (from Stripe Dashboard) |
    | `STRIPE_WEBHOOK_SECRET` | `whsec_...` (from Stripe Webhooks) |
    | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_live_...` (from Stripe Dashboard) |
