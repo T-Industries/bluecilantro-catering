@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { useCartContext } from '@/components/CartProvider'
 
 interface OrderData {
   id: string
@@ -22,6 +23,14 @@ export default function CheckoutSuccessPage() {
   const [order, setOrder] = useState<OrderData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const { clearCart } = useCartContext()
+
+  // Clear cart when order is successfully loaded
+  useEffect(() => {
+    if (order) {
+      clearCart()
+    }
+  }, [order, clearCart])
 
   useEffect(() => {
     // Handle bypass mode (test order without payment)
