@@ -17,6 +17,7 @@ A full-stack catering order management system built with Next.js, featuring cust
 | **Vercel** | Hosting & Deployment | [vercel.com/dashboard](https://vercel.com/dashboard) |
 | **Neon** | PostgreSQL Database | [console.neon.tech](https://console.neon.tech) |
 | **SMTP2Go** | Email Notifications | [app.smtp2go.com](https://app.smtp2go.com) |
+| **Stripe** | Payment Processing | [dashboard.stripe.com](https://dashboard.stripe.com) |
 | **GitHub** | Source Code Repository | [github.com/T-Industries/bluecilantro-catering](https://github.com/T-Industries/bluecilantro-catering) |
 
 ## Features
@@ -25,12 +26,14 @@ A full-stack catering order management system built with Next.js, featuring cust
 - Browse menu by category
 - Add items to cart (fixed price or per-person pricing)
 - Checkout with delivery scheduling (24-hour advance notice required)
+- Secure payment via Stripe (with automatic Canadian tax calculation)
 - Order confirmation with email notification
 - Track order status by order ID
 
 ### Admin Features
 - Secure login with password management
 - Order management (view, confirm, cancel, complete)
+- Payment management (confirm captures payment, cancel releases authorization)
 - Menu management (categories and items CRUD)
 - Calendar view of scheduled orders
 - Settings management (delivery fee, notification email, etc.)
@@ -98,6 +101,11 @@ SMTP2GO_SENDER_EMAIL="your-verified-sender@domain.com"
 
 # App URL (optional, for email links)
 NEXT_PUBLIC_APP_URL="https://your-domain.com"
+
+# Stripe Payment Integration
+STRIPE_SECRET_KEY="sk_test_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
 ```
 
 ### For Local Development with SQLite
@@ -138,6 +146,9 @@ Add the following environment variables in Vercel's project settings:
 - `SESSION_SECRET` - Random 32+ character string
 - `SMTP2GO_API_KEY` - Your SMTP2Go API key
 - `SMTP2GO_SENDER_EMAIL` - Verified sender email
+- `STRIPE_SECRET_KEY` - Stripe secret key (`sk_live_...`)
+- `STRIPE_WEBHOOK_SECRET` - Stripe webhook signing secret (`whsec_...`)
+- `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` - Stripe publishable key (`pk_live_...`)
 
 ### 5. Deploy
 Click **Deploy** and wait for the build to complete.
@@ -211,6 +222,106 @@ Email sending can be toggled in Admin Settings.
 └── .env.example           # Environment variables template
 ```
 
+## Stripe Payment Integration
+
+The system uses Stripe Checkout with manual capture for payments:
+- Customer's card is **authorized** (funds held) at checkout
+- Admin reviews order and confirms availability
+- **Confirm** → Payment captured (customer charged)
+- **Cancel** → Authorization released (no charge)
+
+### Stripe Dashboard Setup
+
+1. **Get API Keys**: Dashboard → Developers → API Keys
+2. **Set Up Webhook**: Dashboard → Developers → Webhooks → Add endpoint
+   - URL: `https://yourdomain.com/api/webhooks/stripe`
+   - Events: `checkout.session.completed`, `checkout.session.expired`, `payment_intent.payment_failed`
+3. **Enable Stripe Tax**: Dashboard → Settings → Tax → Enable automatic tax
+
+### Local Development with Stripe CLI
+
+To test Stripe webhooks locally, use the Stripe CLI to forward webhook events to your local server.
+
+1. **Install Stripe CLI**
+   ```bash
+   # macOS
+   brew install stripe/stripe-cli/stripe
+
+   # Windows (Scoop)
+   scoop install stripe
+
+   # Linux (download from https://stripe.com/docs/stripe-cli)
+   ```
+
+2. **Login to Stripe**
+   ```bash
+   stripe login
+   ```
+   This opens a browser to authenticate with your Stripe account.
+
+3. **Forward webhooks to localhost**
+
+   Open a **new terminal** and run:
+   ```bash
+   stripe listen --forward-to localhost:3000/api/webhooks/stripe
+   ```
+
+   Copy the webhook signing secret shown (starts with `whsec_`) and add it to `.env.local`:
+   ```
+   STRIPE_WEBHOOK_SECRET="whsec_..."
+   ```
+
+4. **Test the payment flow**
+   - Start your dev server: `npm run dev`
+   - Add items to cart and go to checkout
+   - Complete checkout - you'll be redirected to Stripe
+   - Use test card: `4242 4242 4242 4242` (any future expiry, any CVC)
+   - Check your terminal - you should see webhook events
+
+5. **Trigger test events manually**
+   ```bash
+   stripe trigger checkout.session.completed
+   ```
+
+### Test Cards
+
+| Card Number | Description |
+|-------------|-------------|
+| `4242 4242 4242 4242` | Successful payment |
+| `4000 0000 0000 0002` | Card declined |
+| `4000 0025 0000 3155` | Requires 3D Secure authentication |
+
+Use any future expiry date and any 3-digit CVC.
+
+### Stripe Production Checklist
+
+Before going live, complete these steps:
+
+1. **Enable Stripe Tax**
+   - Go to Stripe Dashboard → Settings → Tax
+   - Enable automatic tax calculation
+   - Add your GST/HST registration number under Registrations
+   - Set your business address for tax origin
+
+2. **Create Production Webhook**
+   - Go to Stripe Dashboard → Developers → Webhooks → Add endpoint
+   - URL: `https://bluecilantro24.ca/api/webhooks/stripe`
+   - Select events:
+     - `checkout.session.completed`
+     - `checkout.session.expired`
+     - `payment_intent.payment_failed`
+   - Copy the signing secret (`whsec_...`)
+
+3. **Add Production Environment Variables in Vercel**
+   - `STRIPE_SECRET_KEY` → Live secret key (`sk_live_...`)
+   - `STRIPE_WEBHOOK_SECRET` → Signing secret from step 2 (`whsec_...`)
+   - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` → Live publishable key (`pk_live_...`)
+
+4. **Test the Live Flow**
+   - Place a test order with a real card (you can refund it)
+   - Verify webhook is received (check Stripe Dashboard → Webhooks → Events)
+   - Confirm the order in admin panel and verify payment is captured
+
 ## Troubleshooting
 
 ### White page / Build errors
@@ -233,6 +344,11 @@ lsof -ti:3000 | xargs kill -9
 - Verify SMTP2Go API key is correct
 - Ensure sender email is verified in SMTP2Go
 - Check Admin Settings → "Send Customer Emails" is enabled
+
+### Stripe webhook errors
+- Ensure Stripe CLI is running: `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
+- Verify `STRIPE_WEBHOOK_SECRET` in `.env.local` matches the CLI output
+- Check the webhook endpoint is accessible: `curl http://localhost:3000/api/webhooks/stripe`
 
 ## License
 

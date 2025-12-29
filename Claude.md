@@ -4,7 +4,7 @@
 
 A catering ordering website for BlueCilantro with customer-facing menu/ordering and an admin panel for order management.
 
-**Domain:** Bluecilantro24.com
+**Domain:** bluecilantro24.ca
 
 ## Tech Stack
 
@@ -182,7 +182,7 @@ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY="pk_test_..."
 
 5. **Configure Custom Domain**
    - Go to Project Settings → Domains
-   - Add `bluecilantro24.com`
+   - Add `bluecilantro24.ca`
    - Update DNS records as instructed
 
 ### Step 4: Post-Deployment
@@ -295,6 +295,35 @@ Stripe Tax automatically calculates GST/HST/PST based on customer's delivery add
 | `4000 0025 0000 3155` | Requires 3D Secure |
 
 Use any future expiry date and any 3-digit CVC.
+
+### Stripe Production Checklist
+
+Before going live, complete these steps:
+
+1. **Enable Stripe Tax**
+   - Go to Stripe Dashboard → Settings → Tax
+   - Enable automatic tax calculation
+   - Add your GST/HST registration number under Registrations
+   - Set your business address for tax origin
+
+2. **Create Production Webhook**
+   - Go to Stripe Dashboard → Developers → Webhooks → Add endpoint
+   - URL: `https://bluecilantro24.ca/api/webhooks/stripe`
+   - Select events:
+     - `checkout.session.completed`
+     - `checkout.session.expired`
+     - `payment_intent.payment_failed`
+   - Copy the signing secret (`whsec_...`)
+
+3. **Add Production Environment Variables in Vercel**
+   - `STRIPE_SECRET_KEY` → Live secret key (`sk_live_...`)
+   - `STRIPE_WEBHOOK_SECRET` → Signing secret from step 2 (`whsec_...`)
+   - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` → Live publishable key (`pk_live_...`)
+
+4. **Test the Live Flow**
+   - Place a test order with a real card (you can refund it)
+   - Verify webhook is received (check Stripe Dashboard → Webhooks → Events)
+   - Confirm the order in admin panel and verify payment is captured
 
 ### Payment Database Fields
 

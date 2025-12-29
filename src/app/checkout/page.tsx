@@ -62,7 +62,6 @@ export default function CheckoutPage() {
         customerEmail,
         customerPhone,
         customerAddress,
-        fulfillmentType: 'delivery',
         scheduledDate: cart.scheduledDate,
         scheduledTime: cart.scheduledTime,
         notes: cart.notes,
@@ -80,7 +79,7 @@ export default function CheckoutPage() {
         total,
       }
 
-      const response = await fetch('/api/orders', {
+      const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderData),
@@ -89,12 +88,12 @@ export default function CheckoutPage() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to submit order')
+        throw new Error(result.error || 'Failed to create checkout')
       }
 
-      // Clear cart and redirect to confirmation
+      // Clear cart and redirect to Stripe Checkout
       clearCart()
-      router.push(`/confirmation/${result.orderId}`)
+      window.location.href = result.checkoutUrl
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setIsSubmitting(false)
@@ -278,7 +277,7 @@ export default function CheckoutPage() {
             </div>
 
             <p className="text-xs text-gray-500 mt-4">
-              * Prices do not include taxes. Final amount will be confirmed by the restaurant.
+              * Taxes (GST/HST/PST) will be calculated at checkout based on your delivery address.
             </p>
           </div>
 
@@ -296,10 +295,10 @@ export default function CheckoutPage() {
               disabled={isSubmitting}
               className="w-full bg-primary text-white py-4 rounded-lg font-semibold text-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Submitting Order...' : 'Place Order'}
+              {isSubmitting ? 'Redirecting to Payment...' : 'Proceed to Payment'}
             </button>
             <p className="text-center text-sm text-gray-500">
-              Payment will be collected upon delivery
+              You&apos;ll be redirected to secure checkout. Your card will be authorized but not charged until we confirm your order.
             </p>
             <Link
               href="/cart"
