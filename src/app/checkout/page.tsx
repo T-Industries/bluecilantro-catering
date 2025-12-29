@@ -7,7 +7,7 @@ import { useState, useEffect, FormEvent } from 'react'
 
 export default function CheckoutPage() {
   const router = useRouter()
-  const { cart, isLoaded, setFulfillmentType, setScheduledDate, setScheduledTime, setNotes, getSubtotal, clearCart } =
+  const { cart, isLoaded, setFulfillmentType, setScheduledDate, setScheduledTime, setNotes, getSubtotal } =
     useCartContext()
 
   const [deliveryFee, setDeliveryFee] = useState(25)
@@ -93,8 +93,7 @@ export default function CheckoutPage() {
         throw new Error(result.error || 'Failed to create checkout')
       }
 
-      // Clear cart and redirect
-      clearCart()
+      // Redirect to payment (cart is cleared on success page)
       // If bypass mode, redirect to bypass URL, otherwise to Stripe Checkout
       window.location.href = result.bypassUrl || result.checkoutUrl
     } catch (err) {
