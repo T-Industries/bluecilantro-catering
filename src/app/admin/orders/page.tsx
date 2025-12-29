@@ -156,6 +156,7 @@ function PaymentBadge({ status }: { status: string }) {
     failed: 'bg-red-100 text-red-800',
     cancelled: 'bg-red-100 text-red-800',
     refunded: 'bg-purple-100 text-purple-800',
+    test_bypass: 'bg-purple-100 text-purple-800',
   }
 
   const labels: Record<string, string> = {
@@ -165,6 +166,7 @@ function PaymentBadge({ status }: { status: string }) {
     failed: 'Failed',
     cancelled: 'Cancelled',
     refunded: 'Refunded',
+    test_bypass: 'Test (No Payment)',
   }
 
   return (

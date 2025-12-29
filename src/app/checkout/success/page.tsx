@@ -17,11 +17,34 @@ interface OrderData {
 export default function CheckoutSuccessPage() {
   const searchParams = useSearchParams()
   const sessionId = searchParams.get('session_id')
+  const isBypass = searchParams.get('bypass') === 'true'
+  const orderId = searchParams.get('order_id')
   const [order, setOrder] = useState<OrderData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
+    // Handle bypass mode (test order without payment)
+    if (isBypass && orderId) {
+      fetch(`/api/orders/${orderId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.error) {
+            setError(data.error)
+          } else {
+            setOrder(data)
+          }
+        })
+        .catch(() => {
+          setError('Failed to load order details')
+        })
+        .finally(() => {
+          setLoading(false)
+        })
+      return
+    }
+
+    // Normal mode - fetch by session ID
     if (!sessionId) {
       setError('No session ID provided')
       setLoading(false)
@@ -44,7 +67,7 @@ export default function CheckoutSuccessPage() {
       .finally(() => {
         setLoading(false)
       })
-  }, [sessionId])
+  }, [sessionId, isBypass, orderId])
 
   if (loading) {
     return (
@@ -104,7 +127,9 @@ export default function CheckoutSuccessPage() {
 
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Order Submitted!</h1>
           <p className="text-gray-600 mb-6">
-            Thank you for your order. Your payment has been authorized.
+            {isBypass
+              ? 'This is a test order - no payment was processed.'
+              : 'Thank you for your order. Your payment has been authorized.'}
           </p>
 
           {order && (
@@ -138,19 +163,31 @@ export default function CheckoutSuccessPage() {
             </div>
           )}
 
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-left">
-            <h3 className="font-semibold text-blue-800 mb-2">What happens next?</h3>
-            <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
-              <li>We&apos;ll review your order and confirm availability</li>
-              <li>Once confirmed, your card will be charged</li>
-              <li>You&apos;ll receive a confirmation email</li>
-              <li>We&apos;ll deliver your order at the scheduled time</li>
-            </ol>
-          </div>
+          {isBypass ? (
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-6 text-left">
+              <h3 className="font-semibold text-purple-800 mb-2">Test Order</h3>
+              <p className="text-sm text-purple-700">
+                This order was created using a promo code bypass. No payment was processed.
+                You can view and manage this order in the admin panel.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-left">
+              <h3 className="font-semibold text-blue-800 mb-2">What happens next?</h3>
+              <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
+                <li>We&apos;ll review your order and confirm availability</li>
+                <li>Once confirmed, your card will be charged</li>
+                <li>You&apos;ll receive a confirmation email</li>
+                <li>We&apos;ll deliver your order at the scheduled time</li>
+              </ol>
+            </div>
+          )}
 
-          <p className="text-sm text-gray-500 mb-6">
-            A confirmation email has been sent to <strong>{order?.customerEmail}</strong>
-          </p>
+          {!isBypass && (
+            <p className="text-sm text-gray-500 mb-6">
+              A confirmation email has been sent to <strong>{order?.customerEmail}</strong>
+            </p>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             {order && (

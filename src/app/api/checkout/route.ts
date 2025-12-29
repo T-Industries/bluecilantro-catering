@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { stripe, toCents } from '@/lib/stripe'
+import { sendOrderNotification, sendCustomerOrderConfirmation } from '@/lib/email'
+import { formatCurrency, formatDate } from '@/lib/utils'
 
 interface OrderItemInput {
   menuItemId: string
@@ -20,6 +22,7 @@ interface CheckoutInput {
   scheduledDate: string
   scheduledTime: string
   notes: string | null
+  promoCode?: string
   items: OrderItemInput[]
   subtotal: number
   deliveryFee: number
@@ -59,6 +62,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check for valid bypass promo code
+    const bypassCode = process.env.TEST_BYPASS_CODE
+    const isValidBypass = bypassCode && body.promoCode && body.promoCode === bypassCode
+
+    // If promo code provided but invalid, return error
+    if (body.promoCode && !isValidBypass) {
+      return NextResponse.json(
+        { error: 'Invalid promo code' },
+        { status: 400 }
+      )
+    }
+
     // Calculate line totals server-side (never trust client)
     const itemsWithTotals = body.items.map((item) => {
       const multiplier = item.pricingType === 'per_person' ? (item.guestCount || 1) : 1
@@ -80,11 +95,11 @@ export async function POST(request: NextRequest) {
     const deliveryFee = body.deliveryFee
     const total = subtotal + deliveryFee
 
-    // Create order in database with pending payment status
+    // Create order in database
     const order = await prisma.order.create({
       data: {
         status: 'new',
-        paymentStatus: 'pending',
+        paymentStatus: isValidBypass ? 'test_bypass' : 'pending',
         customerName: body.customerName,
         customerEmail: body.customerEmail,
         customerPhone: body.customerPhone,
@@ -104,6 +119,63 @@ export async function POST(request: NextRequest) {
         items: true,
       },
     })
+
+    // Send order emails (to restaurant and customer)
+    const settings = await prisma.setting.findMany({
+      where: {
+        key: {
+          in: ['business_name', 'business_phone', 'business_address', 'notification_email', 'send_customer_emails'],
+        },
+      },
+    })
+    const settingsMap = settings.reduce(
+      (acc, s) => ({ ...acc, [s.key]: s.value }),
+      {} as Record<string, string>
+    )
+
+    const orderEmailData = {
+      orderId: order.id,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      customerPhone: order.customerPhone,
+      customerAddress: order.customerAddress || undefined,
+      fulfillmentType: order.fulfillmentType,
+      scheduledDate: formatDate(order.scheduledDate),
+      scheduledTime: order.scheduledTime,
+      items: order.items.map((item) => ({
+        itemName: item.itemName,
+        quantity: item.quantity,
+        guestCount: item.guestCount || undefined,
+        lineTotal: formatCurrency(Number(item.lineTotal)),
+        notes: item.notes || undefined,
+      })),
+      subtotal: formatCurrency(Number(order.subtotal)),
+      deliveryFee: formatCurrency(Number(order.deliveryFee)),
+      total: formatCurrency(Number(order.total)),
+      notes: order.notes || undefined,
+      businessName: settingsMap.business_name || 'BlueCilantro',
+      businessPhone: settingsMap.business_phone || undefined,
+      businessAddress: settingsMap.business_address || undefined,
+    }
+
+    // Send notification to restaurant
+    const notificationEmail = settingsMap.notification_email || 'gpwc@bluecilantro.ca'
+    await sendOrderNotification(notificationEmail, orderEmailData)
+
+    // Send confirmation to customer (if enabled)
+    if (settingsMap.send_customer_emails !== 'false') {
+      await sendCustomerOrderConfirmation(orderEmailData)
+    }
+
+    // If bypass mode, skip Stripe and return success directly
+    if (isValidBypass) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      return NextResponse.json({
+        success: true,
+        orderId: order.id,
+        bypassUrl: `${appUrl}/checkout/success?bypass=true&order_id=${order.id}`,
+      })
+    }
 
     // Build line items for Stripe Checkout
     const lineItems = itemsWithTotals.map((item) => {

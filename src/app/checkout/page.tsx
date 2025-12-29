@@ -19,6 +19,7 @@ export default function CheckoutPage() {
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
+  const [promoCode, setPromoCode] = useState('')
 
   // Get minimum date (24 hours from now)
   const getMinDate = () => {
@@ -65,6 +66,7 @@ export default function CheckoutPage() {
         scheduledDate: cart.scheduledDate,
         scheduledTime: cart.scheduledTime,
         notes: cart.notes,
+        promoCode: promoCode.trim(),
         items: cart.items.map((item) => ({
           menuItemId: item.menuItemId,
           itemName: item.name,
@@ -91,9 +93,10 @@ export default function CheckoutPage() {
         throw new Error(result.error || 'Failed to create checkout')
       }
 
-      // Clear cart and redirect to Stripe Checkout
+      // Clear cart and redirect
       clearCart()
-      window.location.href = result.checkoutUrl
+      // If bypass mode, redirect to bypass URL, otherwise to Stripe Checkout
+      window.location.href = result.bypassUrl || result.checkoutUrl
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setIsSubmitting(false)
@@ -231,6 +234,18 @@ export default function CheckoutPage() {
               value={cart.notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Any special requests or dietary requirements..."
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+            />
+          </div>
+
+          {/* Promo Code */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-lg font-semibold mb-4">Have a promo code?</h2>
+            <input
+              type="text"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value)}
+              placeholder="Enter code"
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
             />
           </div>
