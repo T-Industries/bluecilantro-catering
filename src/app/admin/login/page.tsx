@@ -134,7 +134,7 @@ export default function AdminLoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   onBlur={checkEmailNeedsSetup}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
-                  placeholder="gpwc@bluecilantro.ca"
+                  placeholder="Enter your email"
                 />
               </div>
 
