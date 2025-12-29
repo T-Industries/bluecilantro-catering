@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/db'
+import { sendOrderNotification, sendCustomerOrderConfirmation } from '@/lib/email'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import Stripe from 'stripe'
 
 // Disable body parsing - we need the raw body for signature verification
@@ -75,16 +77,73 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     ? session.payment_intent
     : session.payment_intent?.id
 
-  // Update order with authorized status
-  await prisma.order.update({
+  // Update order with authorized status and fetch with items
+  const order = await prisma.order.update({
     where: { id: orderId },
     data: {
       paymentStatus: 'authorized',
       stripePaymentIntentId: paymentIntentId,
     },
+    include: {
+      items: true,
+    },
   })
 
   console.log(`Order ${orderId} payment authorized`)
+
+  // Send order emails now that payment is authorized
+  try {
+    const settings = await prisma.setting.findMany({
+      where: {
+        key: {
+          in: ['business_name', 'business_phone', 'business_address', 'notification_email', 'send_customer_emails'],
+        },
+      },
+    })
+    const settingsMap = settings.reduce(
+      (acc, s) => ({ ...acc, [s.key]: s.value }),
+      {} as Record<string, string>
+    )
+
+    const orderEmailData = {
+      orderId: order.id,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      customerPhone: order.customerPhone,
+      customerAddress: order.customerAddress || undefined,
+      fulfillmentType: order.fulfillmentType,
+      scheduledDate: formatDate(order.scheduledDate),
+      scheduledTime: order.scheduledTime,
+      items: order.items.map((item) => ({
+        itemName: item.itemName,
+        quantity: item.quantity,
+        guestCount: item.guestCount || undefined,
+        lineTotal: formatCurrency(Number(item.lineTotal)),
+        notes: item.notes || undefined,
+      })),
+      subtotal: formatCurrency(Number(order.subtotal)),
+      deliveryFee: formatCurrency(Number(order.deliveryFee)),
+      total: formatCurrency(Number(order.total)),
+      notes: order.notes || undefined,
+      businessName: settingsMap.business_name || 'BlueCilantro',
+      businessPhone: settingsMap.business_phone || undefined,
+      businessAddress: settingsMap.business_address || undefined,
+    }
+
+    // Send notification to restaurant
+    const notificationEmail = settingsMap.notification_email || 'gpwc@bluecilantro.ca'
+    await sendOrderNotification(notificationEmail, orderEmailData)
+
+    // Send confirmation to customer (if enabled)
+    if (settingsMap.send_customer_emails !== 'false') {
+      await sendCustomerOrderConfirmation(orderEmailData)
+    }
+
+    console.log(`Order ${orderId} emails sent`)
+  } catch (emailError) {
+    console.error(`Failed to send order emails for ${orderId}:`, emailError)
+    // Don't throw - order is still valid even if email fails
+  }
 }
 
 async function handleCheckoutExpired(session: Stripe.Checkout.Session) {

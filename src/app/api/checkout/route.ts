@@ -120,55 +120,55 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Send order emails (to restaurant and customer)
-    const settings = await prisma.setting.findMany({
-      where: {
-        key: {
-          in: ['business_name', 'business_phone', 'business_address', 'notification_email', 'send_customer_emails'],
-        },
-      },
-    })
-    const settingsMap = settings.reduce(
-      (acc, s) => ({ ...acc, [s.key]: s.value }),
-      {} as Record<string, string>
-    )
-
-    const orderEmailData = {
-      orderId: order.id,
-      customerName: order.customerName,
-      customerEmail: order.customerEmail,
-      customerPhone: order.customerPhone,
-      customerAddress: order.customerAddress || undefined,
-      fulfillmentType: order.fulfillmentType,
-      scheduledDate: formatDate(order.scheduledDate),
-      scheduledTime: order.scheduledTime,
-      items: order.items.map((item) => ({
-        itemName: item.itemName,
-        quantity: item.quantity,
-        guestCount: item.guestCount || undefined,
-        lineTotal: formatCurrency(Number(item.lineTotal)),
-        notes: item.notes || undefined,
-      })),
-      subtotal: formatCurrency(Number(order.subtotal)),
-      deliveryFee: formatCurrency(Number(order.deliveryFee)),
-      total: formatCurrency(Number(order.total)),
-      notes: order.notes || undefined,
-      businessName: settingsMap.business_name || 'BlueCilantro',
-      businessPhone: settingsMap.business_phone || undefined,
-      businessAddress: settingsMap.business_address || undefined,
-    }
-
-    // Send notification to restaurant
-    const notificationEmail = settingsMap.notification_email || 'gpwc@bluecilantro.ca'
-    await sendOrderNotification(notificationEmail, orderEmailData)
-
-    // Send confirmation to customer (if enabled)
-    if (settingsMap.send_customer_emails !== 'false') {
-      await sendCustomerOrderConfirmation(orderEmailData)
-    }
-
-    // If bypass mode, skip Stripe and return success directly
+    // If bypass mode, send emails immediately and skip Stripe
     if (isValidBypass) {
+      // Send order emails only for bypass orders (Stripe orders send emails via webhook)
+      const settings = await prisma.setting.findMany({
+        where: {
+          key: {
+            in: ['business_name', 'business_phone', 'business_address', 'notification_email', 'send_customer_emails'],
+          },
+        },
+      })
+      const settingsMap = settings.reduce(
+        (acc, s) => ({ ...acc, [s.key]: s.value }),
+        {} as Record<string, string>
+      )
+
+      const orderEmailData = {
+        orderId: order.id,
+        customerName: order.customerName,
+        customerEmail: order.customerEmail,
+        customerPhone: order.customerPhone,
+        customerAddress: order.customerAddress || undefined,
+        fulfillmentType: order.fulfillmentType,
+        scheduledDate: formatDate(order.scheduledDate),
+        scheduledTime: order.scheduledTime,
+        items: order.items.map((item) => ({
+          itemName: item.itemName,
+          quantity: item.quantity,
+          guestCount: item.guestCount || undefined,
+          lineTotal: formatCurrency(Number(item.lineTotal)),
+          notes: item.notes || undefined,
+        })),
+        subtotal: formatCurrency(Number(order.subtotal)),
+        deliveryFee: formatCurrency(Number(order.deliveryFee)),
+        total: formatCurrency(Number(order.total)),
+        notes: order.notes || undefined,
+        businessName: settingsMap.business_name || 'BlueCilantro',
+        businessPhone: settingsMap.business_phone || undefined,
+        businessAddress: settingsMap.business_address || undefined,
+      }
+
+      // Send notification to restaurant
+      const notificationEmail = settingsMap.notification_email || 'gpwc@bluecilantro.ca'
+      await sendOrderNotification(notificationEmail, orderEmailData)
+
+      // Send confirmation to customer (if enabled)
+      if (settingsMap.send_customer_emails !== 'false') {
+        await sendCustomerOrderConfirmation(orderEmailData)
+      }
+
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
       return NextResponse.json({
         success: true,
@@ -176,6 +176,8 @@ export async function POST(request: NextRequest) {
         bypassUrl: `${appUrl}/checkout/success?bypass=true&order_id=${order.id}`,
       })
     }
+
+    // For Stripe orders, emails are sent via webhook after payment is authorized
 
     // Build line items for Stripe Checkout
     const lineItems = itemsWithTotals.map((item) => {
