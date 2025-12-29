@@ -32,6 +32,9 @@ interface Order {
   notes: string | null
   createdAt: string
   items: OrderItem[]
+  paymentStatus: string
+  stripePaymentIntentId: string | null
+  paidAt: string | null
 }
 
 export default function AdminOrderDetailPage() {
@@ -128,6 +131,37 @@ export default function AdminOrderDetailPage() {
         <StatusBadge status={order.status} />
       </div>
 
+      {/* Payment Information */}
+      <div className="bg-white rounded-lg shadow p-4 mb-6">
+        <h2 className="font-semibold mb-3">Payment Information</h2>
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-gray-500 text-sm">Status:</span>
+            <PaymentBadge status={order.paymentStatus} />
+          </div>
+          {order.paidAt && (
+            <div className="text-sm text-gray-500">
+              Paid on {formatDate(order.paidAt)}
+            </div>
+          )}
+          {order.stripePaymentIntentId && (
+            <a
+              href={`https://dashboard.stripe.com/test/payments/${order.stripePaymentIntentId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary hover:underline"
+            >
+              View in Stripe →
+            </a>
+          )}
+        </div>
+        {order.paymentStatus === 'authorized' && (
+          <p className="text-sm text-amber-600 mt-2">
+            Payment is authorized but not yet captured. Confirming the order will charge the customer.
+          </p>
+        )}
+      </div>
+
       {/* Status Actions */}
       {order.status !== 'cancelled' && (
         <div className="bg-white rounded-lg shadow p-4 mb-6">
@@ -139,7 +173,7 @@ export default function AdminOrderDetailPage() {
                 disabled={isUpdating}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                Confirm Order
+                {order.paymentStatus === 'authorized' ? 'Confirm & Capture Payment' : 'Confirm Order'}
               </button>
             )}
             {(order.status === 'new' || order.status === 'confirmed') && (
@@ -157,7 +191,7 @@ export default function AdminOrderDetailPage() {
                 disabled={isUpdating}
                 className="px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 disabled:opacity-50"
               >
-                Cancel Order
+                {order.paymentStatus === 'authorized' ? 'Cancel & Release Payment' : 'Cancel Order'}
               </button>
             )}
           </div>
@@ -288,6 +322,34 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`inline-block px-3 py-1 text-sm font-medium rounded-full ${styles[status] || 'bg-gray-100'}`}>
       {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  )
+}
+
+function PaymentBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    pending: 'bg-gray-100 text-gray-800',
+    authorized: 'bg-yellow-100 text-yellow-800',
+    paid: 'bg-green-100 text-green-800',
+    failed: 'bg-red-100 text-red-800',
+    cancelled: 'bg-red-100 text-red-800',
+    refunded: 'bg-purple-100 text-purple-800',
+    test_bypass: 'bg-purple-100 text-purple-800',
+  }
+
+  const labels: Record<string, string> = {
+    pending: 'Pending',
+    authorized: 'Authorized',
+    paid: 'Paid',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+    refunded: 'Refunded',
+    test_bypass: 'Test (No Payment)',
+  }
+
+  return (
+    <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${styles[status] || 'bg-gray-100'}`}>
+      {labels[status] || status}
     </span>
   )
 }

@@ -82,9 +82,9 @@ export default async function AdminOrdersPage({
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Order</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Customer</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Type</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Scheduled</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Total</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Payment</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Status</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-500">Actions</th>
                 </tr>
@@ -101,23 +101,15 @@ export default async function AdminOrdersPage({
                       <div className="text-xs text-gray-500">{order.customerPhone}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-block px-2 py-1 text-xs font-medium rounded ${
-                          order.fulfillmentType === 'delivery'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-green-100 text-green-800'
-                        }`}
-                      >
-                        {order.fulfillmentType.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
                       <div className="text-sm">{formatDate(order.scheduledDate)}</div>
                       <div className="text-xs text-gray-500">{order.scheduledTime}</div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-sm font-medium">{formatCurrency(Number(order.total))}</div>
                       <div className="text-xs text-gray-500">{order.items.length} items</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <PaymentBadge status={order.paymentStatus} />
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={order.status} />
@@ -152,6 +144,34 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${styles[status] || 'bg-gray-100'}`}>
       {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  )
+}
+
+function PaymentBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    pending: 'bg-gray-100 text-gray-800',
+    authorized: 'bg-yellow-100 text-yellow-800',
+    paid: 'bg-green-100 text-green-800',
+    failed: 'bg-red-100 text-red-800',
+    cancelled: 'bg-red-100 text-red-800',
+    refunded: 'bg-purple-100 text-purple-800',
+    test_bypass: 'bg-purple-100 text-purple-800',
+  }
+
+  const labels: Record<string, string> = {
+    pending: 'Pending',
+    authorized: 'Authorized',
+    paid: 'Paid',
+    failed: 'Failed',
+    cancelled: 'Cancelled',
+    refunded: 'Refunded',
+    test_bypass: 'Test (No Payment)',
+  }
+
+  return (
+    <span className={`inline-block px-2 py-1 text-xs font-medium rounded ${styles[status] || 'bg-gray-100'}`}>
+      {labels[status] || status}
     </span>
   )
 }

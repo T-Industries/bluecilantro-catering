@@ -72,6 +72,13 @@ model Order {
   deliveryFee     Decimal     @default(0) @map("delivery_fee")
   total           Decimal
   notes           String?
+
+  // Payment fields
+  paymentStatus       String    @default("pending") @map("payment_status")
+  stripeSessionId     String?   @unique @map("stripe_session_id")
+  stripePaymentIntentId String? @unique @map("stripe_payment_intent_id")
+  paidAt              DateTime? @map("paid_at")
+
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
   items           OrderItem[]

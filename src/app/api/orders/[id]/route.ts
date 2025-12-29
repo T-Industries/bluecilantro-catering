@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 import { sendOrderStatusUpdate } from '@/lib/email'
 import { formatCurrency, formatDate } from '@/lib/utils'
+import { stripe } from '@/lib/stripe'
 
 export async function GET(
   request: NextRequest,
@@ -48,9 +49,53 @@ export async function PUT(
       where: { id: params.id },
     })
 
+    if (!currentOrder) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    // Handle payment capture/cancel when status changes
+    let paymentStatus = currentOrder.paymentStatus
+    let paidAt = currentOrder.paidAt
+
+    // If confirming and payment is authorized, capture the payment
+    if (status === 'confirmed' && currentOrder.status !== 'confirmed') {
+      if (currentOrder.paymentStatus === 'authorized' && currentOrder.stripePaymentIntentId) {
+        try {
+          await stripe.paymentIntents.capture(currentOrder.stripePaymentIntentId)
+          paymentStatus = 'paid'
+          paidAt = new Date()
+          console.log(`Payment captured for order ${params.id}`)
+        } catch (stripeError) {
+          console.error('Failed to capture payment:', stripeError)
+          return NextResponse.json(
+            { error: 'Failed to capture payment. Please try again.' },
+            { status: 500 }
+          )
+        }
+      }
+    }
+
+    // If cancelling and payment is authorized, cancel the authorization
+    if (status === 'cancelled' && currentOrder.status !== 'cancelled') {
+      if (currentOrder.paymentStatus === 'authorized' && currentOrder.stripePaymentIntentId) {
+        try {
+          await stripe.paymentIntents.cancel(currentOrder.stripePaymentIntentId)
+          paymentStatus = 'cancelled'
+          console.log(`Payment authorization cancelled for order ${params.id}`)
+        } catch (stripeError) {
+          console.error('Failed to cancel payment:', stripeError)
+          // Don't block cancellation if payment cancel fails
+        }
+      }
+    }
+
     const order = await prisma.order.update({
       where: { id: params.id },
-      data: { status },
+      data: {
+        status,
+        paymentStatus,
+        paidAt,
+      },
       include: { items: true },
     })
 
@@ -114,10 +159,35 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Get current order to check payment status
+    const currentOrder = await prisma.order.findUnique({
+      where: { id: params.id },
+    })
+
+    if (!currentOrder) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 })
+    }
+
+    // Cancel payment authorization if exists
+    let paymentStatus = currentOrder.paymentStatus
+    if (currentOrder.paymentStatus === 'authorized' && currentOrder.stripePaymentIntentId) {
+      try {
+        await stripe.paymentIntents.cancel(currentOrder.stripePaymentIntentId)
+        paymentStatus = 'cancelled'
+        console.log(`Payment authorization cancelled for order ${params.id}`)
+      } catch (stripeError) {
+        console.error('Failed to cancel payment:', stripeError)
+        // Don't block cancellation if payment cancel fails
+      }
+    }
+
     // Soft delete - just update status to cancelled
     const order = await prisma.order.update({
       where: { id: params.id },
-      data: { status: 'cancelled' },
+      data: {
+        status: 'cancelled',
+        paymentStatus,
+      },
       include: { items: true },
     })
 

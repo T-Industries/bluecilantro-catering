@@ -19,6 +19,7 @@ export default function CheckoutPage() {
   const [customerEmail, setCustomerEmail] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
+  const [promoCode, setPromoCode] = useState('')
 
   // Get minimum date (24 hours from now)
   const getMinDate = () => {
@@ -62,10 +63,10 @@ export default function CheckoutPage() {
         customerEmail,
         customerPhone,
         customerAddress,
-        fulfillmentType: 'delivery',
         scheduledDate: cart.scheduledDate,
         scheduledTime: cart.scheduledTime,
         notes: cart.notes,
+        promoCode: promoCode.trim(),
         items: cart.items.map((item) => ({
           menuItemId: item.menuItemId,
           itemName: item.name,
@@ -80,7 +81,7 @@ export default function CheckoutPage() {
         total,
       }
 
-      const response = await fetch('/api/orders', {
+      const response = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(orderData),
@@ -89,12 +90,13 @@ export default function CheckoutPage() {
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to submit order')
+        throw new Error(result.error || 'Failed to create checkout')
       }
 
-      // Clear cart and redirect to confirmation
+      // Clear cart and redirect
       clearCart()
-      router.push(`/confirmation/${result.orderId}`)
+      // If bypass mode, redirect to bypass URL, otherwise to Stripe Checkout
+      window.location.href = result.bypassUrl || result.checkoutUrl
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setIsSubmitting(false)
@@ -236,6 +238,18 @@ export default function CheckoutPage() {
             />
           </div>
 
+          {/* Promo Code */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-lg font-semibold mb-4">Have a promo code?</h2>
+            <input
+              type="text"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value)}
+              placeholder="Enter code"
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary"
+            />
+          </div>
+
           {/* Order Summary */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-semibold mb-4">Order Summary</h2>
@@ -278,7 +292,7 @@ export default function CheckoutPage() {
             </div>
 
             <p className="text-xs text-gray-500 mt-4">
-              * Prices do not include taxes. Final amount will be confirmed by the restaurant.
+              * Taxes (GST/HST/PST) will be calculated at checkout based on your delivery address.
             </p>
           </div>
 
@@ -296,10 +310,10 @@ export default function CheckoutPage() {
               disabled={isSubmitting}
               className="w-full bg-primary text-white py-4 rounded-lg font-semibold text-lg hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isSubmitting ? 'Submitting Order...' : 'Place Order'}
+              {isSubmitting ? 'Redirecting to Payment...' : 'Proceed to Payment'}
             </button>
             <p className="text-center text-sm text-gray-500">
-              Payment will be collected upon delivery
+              You&apos;ll be redirected to secure checkout. Your card will be authorized but not charged until we confirm your order.
             </p>
             <Link
               href="/cart"
