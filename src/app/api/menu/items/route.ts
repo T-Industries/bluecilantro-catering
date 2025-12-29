@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 
@@ -46,6 +47,9 @@ export async function POST(request: NextRequest) {
         displayOrder: (maxOrder._max.displayOrder || 0) + 1,
       },
     })
+
+    // Revalidate the home page to show the new item
+    revalidatePath('/')
 
     return NextResponse.json(item)
   } catch (error) {

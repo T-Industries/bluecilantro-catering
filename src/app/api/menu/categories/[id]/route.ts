@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
 
@@ -23,6 +24,9 @@ export async function PUT(
       },
     })
 
+    // Revalidate the home page to reflect changes
+    revalidatePath('/')
+
     return NextResponse.json(category)
   } catch (error) {
     console.error('Failed to update category:', error)
@@ -43,6 +47,9 @@ export async function DELETE(
     await prisma.menuCategory.delete({
       where: { id: params.id },
     })
+
+    // Revalidate the home page to reflect deletion
+    revalidatePath('/')
 
     return NextResponse.json({ success: true })
   } catch (error) {
