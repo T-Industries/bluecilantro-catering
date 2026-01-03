@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { sendOrderStatusUpdate } from '@/lib/email'
+import { sendOrderStatusUpdate, sendAdminStatusNotification } from '@/lib/email'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { stripe } from '@/lib/stripe'
 
@@ -99,13 +99,13 @@ export async function PUT(
       include: { items: true },
     })
 
-    // Send email notification if status changed to confirmed or cancelled
-    if (currentOrder && currentOrder.status !== status && (status === 'confirmed' || status === 'cancelled')) {
+    // Send email notification if status changed to confirmed, completed, or cancelled
+    if (currentOrder && currentOrder.status !== status && (status === 'confirmed' || status === 'completed' || status === 'cancelled')) {
       // Get business settings for email
       const settings = await prisma.setting.findMany({
         where: {
           key: {
-            in: ['business_name', 'business_phone', 'business_address'],
+            in: ['business_name', 'business_phone', 'business_address', 'notification_email'],
           },
         },
       })
@@ -139,7 +139,12 @@ export async function PUT(
         businessAddress: settingsMap.business_address || undefined,
       }
 
-      await sendOrderStatusUpdate(orderEmailData, status as 'confirmed' | 'cancelled')
+      // Send to customer
+      await sendOrderStatusUpdate(orderEmailData, status as 'confirmed' | 'completed' | 'cancelled')
+
+      // Send to admin
+      const adminEmail = settingsMap.notification_email || 'gpwc@bluecilantro.ca'
+      await sendAdminStatusNotification(adminEmail, orderEmailData, status as 'confirmed' | 'completed' | 'cancelled')
     }
 
     return NextResponse.json(order)
@@ -191,11 +196,11 @@ export async function DELETE(
       include: { items: true },
     })
 
-    // Send cancellation email to customer
+    // Send cancellation emails
     const settings = await prisma.setting.findMany({
       where: {
         key: {
-          in: ['business_name', 'business_phone', 'business_address'],
+          in: ['business_name', 'business_phone', 'business_address', 'notification_email'],
         },
       },
     })
@@ -229,7 +234,12 @@ export async function DELETE(
       businessAddress: settingsMap.business_address || undefined,
     }
 
+    // Send to customer
     await sendOrderStatusUpdate(orderEmailData, 'cancelled')
+
+    // Send to admin
+    const adminEmail = settingsMap.notification_email || 'gpwc@bluecilantro.ca'
+    await sendAdminStatusNotification(adminEmail, orderEmailData, 'cancelled')
 
     return NextResponse.json({ success: true, order })
   } catch (error) {

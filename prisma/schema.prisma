@@ -103,3 +103,107 @@ model OrderItem {
 
   @@map("order_items")
 }
+
+// ============================================
+// PACKAGE MENU SYSTEM
+// ============================================
+
+model MenuPackage {
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  type         String   // "selection", "quantity", "fixed"
+  imageUrl     String?  @map("image_url")
+  badge        String?  // "MOST POPULAR", "NEW", etc.
+  minGuests    Int?     @map("min_guests")
+  active       Boolean  @default(true)
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tiers      PackageTier[]
+  categories PackageCategory[]
+  items      PackageItem[]
+  upgrades   PackageUpgrade[]
+
+  @@map("menu_packages")
+}
+
+model PackageTier {
+  id           String      @id @default(uuid())
+  packageId    String      @map("package_id")
+  package      MenuPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  selectCount  Int?        @map("select_count")
+  price        Decimal
+  active       Boolean     @default(true)
+  displayOrder Int         @default(0) @map("display_order")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  @@map("package_tiers")
+}
+
+model PackageCategory {
+  id           String                @id @default(uuid())
+  packageId    String                @map("package_id")
+  package      MenuPackage           @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  imageUrl     String?               @map("image_url")
+  active       Boolean               @default(true)
+  displayOrder Int                   @default(0) @map("display_order")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+  items        PackageCategoryItem[]
+
+  @@map("package_categories")
+}
+
+model PackageCategoryItem {
+  id           String          @id @default(uuid())
+  categoryId   String          @map("category_id")
+  category     PackageCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  active       Boolean         @default(true)
+  displayOrder Int             @default(0) @map("display_order")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  @@map("package_category_items")
+}
+
+model PackageItem {
+  id           String      @id @default(uuid())
+  packageId    String      @map("package_id")
+  package      MenuPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  imageUrl     String?     @map("image_url")
+  price        Decimal?    // For fixed type
+  tierPrices   Json?       @map("tier_prices") // For quantity type: {"tierId": "12.00"}
+  badge        String?
+  active       Boolean     @default(true)
+  displayOrder Int         @default(0) @map("display_order")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  @@map("package_items")
+}
+
+model PackageUpgrade {
+  id             String      @id @default(uuid())
+  packageId      String      @map("package_id")
+  package        MenuPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  pricePerPerson Decimal     @map("price_per_person")
+  active         Boolean     @default(true)
+  displayOrder   Int         @default(0) @map("display_order")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  @@map("package_upgrades")
+}

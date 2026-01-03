@@ -259,7 +259,7 @@ export async function sendCustomerOrderConfirmation(
 
 export async function sendOrderStatusUpdate(
   orderData: OrderEmailData,
-  newStatus: 'confirmed' | 'cancelled'
+  newStatus: 'confirmed' | 'cancelled' | 'completed'
 ): Promise<boolean> {
   const { SMTP2GO_API_KEY, SMTP2GO_SENDER_EMAIL } = process.env
 
@@ -275,6 +275,12 @@ export async function sendOrderStatusUpdate(
       heading: 'Order Cancelled',
       message: 'Your catering order has been cancelled. If you have any questions, please contact us.',
       color: '#DC2626',
+    },
+    completed: {
+      subject: `Order Completed - ${orderData.businessName || 'BlueCilantro'} Catering`,
+      heading: 'Your Order is Complete!',
+      message: 'Thank you for choosing us! Your catering order has been completed. We hope you enjoyed the food!',
+      color: '#2D5A27',
     },
   }
 
@@ -321,6 +327,134 @@ export async function sendOrderStatusUpdate(
     console.error(`Failed to send ${newStatus} email:`, error)
     return false
   }
+}
+
+export async function sendAdminStatusNotification(
+  adminEmail: string,
+  orderData: OrderEmailData,
+  newStatus: 'confirmed' | 'cancelled' | 'completed'
+): Promise<boolean> {
+  const { SMTP2GO_API_KEY, SMTP2GO_SENDER_EMAIL } = process.env
+
+  const statusMessages = {
+    confirmed: {
+      subject: `Order CONFIRMED - ${orderData.orderId.slice(0, 8)}`,
+      heading: 'Order Confirmed',
+      message: `Order ${orderData.orderId.slice(0, 8)} has been confirmed and payment captured.`,
+      color: '#2D5A27',
+    },
+    cancelled: {
+      subject: `Order CANCELLED - ${orderData.orderId.slice(0, 8)}`,
+      heading: 'Order Cancelled',
+      message: `Order ${orderData.orderId.slice(0, 8)} has been cancelled.`,
+      color: '#DC2626',
+    },
+    completed: {
+      subject: `Order COMPLETED - ${orderData.orderId.slice(0, 8)}`,
+      heading: 'Order Completed',
+      message: `Order ${orderData.orderId.slice(0, 8)} has been marked as completed.`,
+      color: '#2D5A27',
+    },
+  }
+
+  const statusInfo = statusMessages[newStatus]
+
+  if (!SMTP2GO_API_KEY) {
+    console.log('='.repeat(60))
+    console.log(`ADMIN STATUS NOTIFICATION (${newStatus.toUpperCase()}) - SMTP2Go not configured`)
+    console.log('='.repeat(60))
+    console.log(`To: ${adminEmail}`)
+    console.log(`Subject: ${statusInfo.subject}`)
+    console.log('-'.repeat(60))
+    console.log(formatAdminStatusText(orderData, statusInfo))
+    console.log('='.repeat(60))
+    return true
+  }
+
+  const senderEmail = SMTP2GO_SENDER_EMAIL || 'orders@bluecilantro.ca'
+
+  try {
+    const response = await fetch('https://api.smtp2go.com/v3/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: SMTP2GO_API_KEY,
+        to: [adminEmail],
+        sender: senderEmail,
+        subject: statusInfo.subject,
+        text_body: formatAdminStatusText(orderData, statusInfo),
+        html_body: formatAdminStatusHtml(orderData, statusInfo),
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!response.ok || result.data?.error) {
+      console.error(`SMTP2Go error (admin status ${newStatus}):`, result)
+      return false
+    }
+
+    console.log(`Admin status notification (${newStatus}) sent successfully`)
+    return true
+  } catch (error) {
+    console.error(`Failed to send admin ${newStatus} notification:`, error)
+    return false
+  }
+}
+
+function formatAdminStatusText(data: OrderEmailData, statusInfo: StatusInfo): string {
+  const lines = [
+    statusInfo.heading.toUpperCase(),
+    ``,
+    statusInfo.message,
+    ``,
+    `ORDER DETAILS`,
+    `Order ID: ${data.orderId}`,
+    `Customer: ${data.customerName}`,
+    `Email: ${data.customerEmail}`,
+    `Phone: ${data.customerPhone}`,
+    data.customerAddress ? `Address: ${data.customerAddress}` : '',
+    ``,
+    `Scheduled: ${data.scheduledDate} at ${data.scheduledTime}`,
+    `Total: ${data.total}`,
+  ]
+
+  return lines.filter(Boolean).join('\n')
+}
+
+function formatAdminStatusHtml(data: OrderEmailData, statusInfo: StatusInfo): string {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>${statusInfo.heading}</title>
+    </head>
+    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5f5;">
+      <div style="background: ${statusInfo.color}; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+        <h1 style="margin: 0;">BlueCilantro Admin</h1>
+        <p style="margin: 5px 0 0; font-size: 18px;">${statusInfo.heading}</p>
+      </div>
+
+      <div style="padding: 20px; background: white; border-radius: 0 0 8px 8px;">
+        <p>${statusInfo.message}</p>
+
+        <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+          <p style="margin: 0 0 10px; font-size: 14px;">Order ID: <strong>${data.orderId}</strong></p>
+          <p style="margin: 0 0 5px;"><strong>Customer:</strong> ${data.customerName}</p>
+          <p style="margin: 0 0 5px;"><strong>Email:</strong> ${data.customerEmail}</p>
+          <p style="margin: 0 0 5px;"><strong>Phone:</strong> ${data.customerPhone}</p>
+          ${data.customerAddress ? `<p style="margin: 0 0 5px;"><strong>Address:</strong> ${data.customerAddress}</p>` : ''}
+        </div>
+
+        <div style="background: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+          <p style="margin: 0 0 5px;"><strong>Scheduled:</strong> ${data.scheduledDate} at ${data.scheduledTime}</p>
+          <p style="margin: 0; font-size: 18px;"><strong>Total: ${data.total}</strong></p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `
 }
 
 function formatCustomerConfirmationText(data: OrderEmailData): string {

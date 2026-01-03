@@ -28,10 +28,12 @@ export default function AdminMenuPage() {
   const [categories, setCategories] = useState<MenuCategory[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [editingCategory, setEditingCategory] = useState<string | null>(null)
-  const [editingItem, setEditingItem] = useState<string | null>(null)
   const [newCategoryName, setNewCategoryName] = useState('')
   const [showAddCategory, setShowAddCategory] = useState(false)
   const [showAddItem, setShowAddItem] = useState<string | null>(null)
+
+  // Edit item state
+  const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
 
   // New item form state
   const [newItem, setNewItem] = useState({
@@ -136,6 +138,30 @@ export default function AdminMenuPage() {
     }
   }
 
+  const updateItem = async () => {
+    if (!editingItem) return
+
+    try {
+      await fetch(`/api/menu/items/${editingItem.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editingItem.name,
+          description: editingItem.description,
+          price: parseFloat(editingItem.price),
+          pricingType: editingItem.pricingType,
+          servesCount: editingItem.servesCount,
+          imageUrl: editingItem.imageUrl,
+          active: editingItem.active,
+        }),
+      })
+      setEditingItem(null)
+      fetchMenu()
+    } catch (err) {
+      console.error('Failed to update item:', err)
+    }
+  }
+
   const toggleItemActive = async (id: string, active: boolean) => {
     try {
       await fetch(`/api/menu/items/${id}`, {
@@ -203,6 +229,104 @@ export default function AdminMenuPage() {
                 className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark"
               >
                 Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Item Modal */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-lg mx-4">
+            <h2 className="text-lg font-semibold mb-4">Edit Menu Item</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input
+                  type="text"
+                  value={editingItem.name}
+                  onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={editingItem.description || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  rows={3}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingItem.price}
+                    onChange={(e) => setEditingItem({ ...editingItem, price: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pricing Type</label>
+                  <select
+                    value={editingItem.pricingType}
+                    onChange={(e) => setEditingItem({ ...editingItem, pricingType: e.target.value })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  >
+                    <option value="fixed">Fixed Price</option>
+                    <option value="per_person">Per Person</option>
+                  </select>
+                </div>
+              </div>
+              {editingItem.pricingType === 'per_person' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Minimum Guests</label>
+                  <input
+                    type="number"
+                    value={editingItem.servesCount || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, servesCount: e.target.value ? parseInt(e.target.value) : null })}
+                    className="w-full px-3 py-2 border rounded-lg"
+                    placeholder="e.g., 10"
+                  />
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Image URL</label>
+                <input
+                  type="url"
+                  value={editingItem.imageUrl || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, imageUrl: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder="https://..."
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="itemActive"
+                  checked={editingItem.active}
+                  onChange={(e) => setEditingItem({ ...editingItem, active: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <label htmlFor="itemActive" className="text-sm text-gray-700">Visible on menu</label>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end mt-6">
+              <button
+                onClick={() => setEditingItem(null)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={updateItem}
+                className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark"
+              >
+                Save Changes
               </button>
             </div>
           </div>
@@ -360,6 +484,12 @@ export default function AdminMenuPage() {
                         </div>
                       </div>
                       <div className="flex gap-2 mt-2">
+                        <button
+                          onClick={() => setEditingItem(item)}
+                          className="text-xs text-primary hover:text-primary-dark"
+                        >
+                          Edit
+                        </button>
                         <button
                           onClick={() => toggleItemActive(item.id, !item.active)}
                           className="text-xs text-gray-500 hover:text-gray-700"

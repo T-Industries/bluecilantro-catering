@@ -35,6 +35,7 @@ export function AdminNav({ email }: AdminNavProps) {
     { href: '/admin/orders', label: 'Orders', icon: '📋' },
     { href: '/admin/calendar', label: 'Calendar', icon: '📅' },
     { href: '/admin/menu', label: 'Menu', icon: '🍽️' },
+    { href: '/admin/packages', label: 'Packages', icon: '📦' },
     { href: '/admin/settings', label: 'Settings', icon: '⚙️' },
   ]
 

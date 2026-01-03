@@ -4,6 +4,7 @@ import { useCartContext } from '@/components/CartProvider'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect, FormEvent } from 'react'
+import { PackageCartItemSelection, PackageCartItemQuantity } from '@/types'
 
 export default function CheckoutPage() {
   const router = useRouter()
@@ -51,6 +52,7 @@ export default function CheckoutPage() {
 
   const subtotal = getSubtotal()
   const total = subtotal + deliveryFee
+  const hasItems = cart.items.length > 0 || cart.packageItems.length > 0
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -58,6 +60,66 @@ export default function CheckoutPage() {
     setIsSubmitting(true)
 
     try {
+      // Build order items from both standard items and package items
+      const orderItems = [
+        // Standard menu items
+        ...cart.items.map((item) => ({
+          menuItemId: item.menuItemId,
+          itemName: item.name,
+          itemPrice: item.price,
+          pricingType: item.pricingType,
+          quantity: item.quantity,
+          guestCount: item.pricingType === 'per_person' ? item.guestCount || 10 : null,
+          notes: item.notes,
+        })),
+        // Package items
+        ...cart.packageItems.map((pkgItem) => {
+          if (pkgItem.type === 'package_selection') {
+            const selectionItem = pkgItem as PackageCartItemSelection
+            // Build a descriptive name for the selection package
+            const selectionsDesc = selectionItem.selections
+              .map((s) => `${s.categoryName}: ${s.items.map((i) => i.name).join(', ')}`)
+              .join('; ')
+            const upgradesDesc = selectionItem.upgrades.length > 0
+              ? ` | Upgrades: ${selectionItem.upgrades.map((u) => u.name).join(', ')}`
+              : ''
+
+            return {
+              menuItemId: null, // Package items don't have a menu item ID
+              itemName: `${selectionItem.packageName} (${selectionItem.tierName})`,
+              itemPrice: selectionItem.tierPrice,
+              pricingType: 'per_person',
+              quantity: 1,
+              guestCount: selectionItem.guestCount,
+              notes: `${selectionsDesc}${upgradesDesc}${selectionItem.notes ? ' | Notes: ' + selectionItem.notes : ''}`,
+              // Package-specific metadata
+              packageId: selectionItem.packageId,
+              packageType: 'selection',
+              tierId: selectionItem.tierId,
+              upgrades: selectionItem.upgrades,
+              lineTotal: selectionItem.total,
+            }
+          } else {
+            const quantityItem = pkgItem as PackageCartItemQuantity
+            return {
+              menuItemId: null,
+              itemName: `${quantityItem.itemName} (${quantityItem.packageName}${quantityItem.tierName ? ' - ' + quantityItem.tierName : ''})`,
+              itemPrice: quantityItem.unitPrice,
+              pricingType: 'fixed',
+              quantity: quantityItem.quantity,
+              guestCount: null,
+              notes: quantityItem.notes || '',
+              // Package-specific metadata
+              packageId: quantityItem.packageId,
+              packageType: quantityItem.type === 'package_quantity' ? 'quantity' : 'fixed',
+              itemId: quantityItem.itemId,
+              tierId: quantityItem.tierId,
+              lineTotal: quantityItem.total,
+            }
+          }
+        }),
+      ]
+
       const orderData = {
         customerName,
         customerEmail,
@@ -67,15 +129,7 @@ export default function CheckoutPage() {
         scheduledTime: cart.scheduledTime,
         notes: cart.notes,
         promoCode: promoCode.trim(),
-        items: cart.items.map((item) => ({
-          menuItemId: item.menuItemId,
-          itemName: item.name,
-          itemPrice: item.price,
-          pricingType: item.pricingType,
-          quantity: item.quantity,
-          guestCount: item.pricingType === 'per_person' ? item.guestCount || 10 : null,
-          notes: item.notes,
-        })),
+        items: orderItems,
         subtotal,
         deliveryFee,
         total,
@@ -110,7 +164,7 @@ export default function CheckoutPage() {
     )
   }
 
-  if (cart.items.length === 0) {
+  if (!hasItems) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="bg-white rounded-lg shadow-md p-8 text-center max-w-md">
@@ -254,6 +308,7 @@ export default function CheckoutPage() {
             <h2 className="text-lg font-semibold mb-4">Order Summary</h2>
 
             <div className="divide-y">
+              {/* Standard Items */}
               {cart.items.map((item) => (
                 <div key={item.menuItemId} className="py-3 flex justify-between">
                   <div>
@@ -271,6 +326,39 @@ export default function CheckoutPage() {
                       (item.pricingType === 'per_person' ? item.guestCount || 10 : 1)
                     ).toFixed(2)}
                   </span>
+                </div>
+              ))}
+
+              {/* Package Items */}
+              {cart.packageItems.map((pkgItem) => (
+                <div key={pkgItem.id} className="py-3">
+                  {pkgItem.type === 'package_selection' ? (
+                    <div className="flex justify-between">
+                      <div>
+                        <span className="font-medium">{(pkgItem as PackageCartItemSelection).packageName}</span>
+                        <span className="text-gray-500 ml-2">
+                          ({(pkgItem as PackageCartItemSelection).tierName}, {(pkgItem as PackageCartItemSelection).guestCount} guests)
+                        </span>
+                        {(pkgItem as PackageCartItemSelection).upgrades.length > 0 && (
+                          <span className="text-sm text-primary ml-2">
+                            +{(pkgItem as PackageCartItemSelection).upgrades.map(u => u.name).join(', ')}
+                          </span>
+                        )}
+                      </div>
+                      <span>${pkgItem.total.toFixed(2)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between">
+                      <div>
+                        <span className="font-medium">{(pkgItem as PackageCartItemQuantity).itemName}</span>
+                        <span className="text-gray-500 ml-2">
+                          x{(pkgItem as PackageCartItemQuantity).quantity}
+                          {(pkgItem as PackageCartItemQuantity).tierName && ` (${(pkgItem as PackageCartItemQuantity).tierName})`}
+                        </span>
+                      </div>
+                      <span>${pkgItem.total.toFixed(2)}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
