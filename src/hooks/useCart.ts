@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { CartItem } from '@/types'
+import { CartItem, PackageCartItem, PackageCartItemSelection, PackageCartItemQuantity } from '@/types'
 
 const CART_STORAGE_KEY = 'bluecilantro_cart'
 
 export interface CartState {
   items: CartItem[]
+  packageItems: PackageCartItem[]
   fulfillmentType: 'delivery' | 'pickup'
   scheduledDate: string
   scheduledTime: string
@@ -15,6 +16,7 @@ export interface CartState {
 
 const defaultCartState: CartState = {
   items: [],
+  packageItems: [],
   fulfillmentType: 'delivery',
   scheduledDate: '',
   scheduledTime: '',
@@ -31,7 +33,13 @@ export function useCart() {
       const stored = localStorage.getItem(CART_STORAGE_KEY)
       if (stored) {
         try {
-          setCart(JSON.parse(stored))
+          const parsed = JSON.parse(stored)
+          // Ensure packageItems array exists (for backwards compatibility)
+          setCart({
+            ...defaultCartState,
+            ...parsed,
+            packageItems: parsed.packageItems || [],
+          })
         } catch (e) {
           console.error('Failed to parse cart from localStorage', e)
         }
@@ -144,18 +152,112 @@ export function useCart() {
     }
   }, [])
 
+  // Package cart functions
+  interface AddPackageParams {
+    packageId: string
+    packageName: string
+    packageType: 'selection' | 'quantity' | 'fixed'
+    // For selection packages
+    tierId?: string
+    tierName?: string
+    tierPrice?: number
+    guestCount?: number
+    selections?: {
+      categoryId: string
+      categoryName: string
+      items: { id: string; name: string }[]
+    }[]
+    upgrades?: {
+      id: string
+      name: string
+      pricePerPerson: number
+    }[]
+    // For quantity/fixed packages
+    itemId?: string
+    itemName?: string
+    quantity?: number
+    unitPrice?: number
+    total: number
+  }
+
+  const addPackageToCart = useCallback((params: AddPackageParams) => {
+    setCart((prev) => {
+      const id = `pkg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
+      if (params.packageType === 'selection') {
+        const newItem: PackageCartItemSelection = {
+          id,
+          type: 'package_selection',
+          packageId: params.packageId,
+          packageName: params.packageName,
+          tierId: params.tierId!,
+          tierName: params.tierName!,
+          tierPrice: params.tierPrice!,
+          guestCount: params.guestCount!,
+          selections: params.selections || [],
+          upgrades: params.upgrades || [],
+          total: params.total,
+        }
+        return {
+          ...prev,
+          packageItems: [...prev.packageItems, newItem],
+        }
+      } else {
+        const newItem: PackageCartItemQuantity = {
+          id,
+          type: params.packageType === 'quantity' ? 'package_quantity' : 'package_fixed',
+          packageId: params.packageId,
+          packageName: params.packageName,
+          itemId: params.itemId!,
+          itemName: params.itemName!,
+          tierId: params.tierId,
+          tierName: params.tierName,
+          quantity: params.quantity!,
+          unitPrice: params.unitPrice!,
+          total: params.total,
+        }
+        return {
+          ...prev,
+          packageItems: [...prev.packageItems, newItem],
+        }
+      }
+    })
+  }, [])
+
+  const removePackageItem = useCallback((packageItemId: string) => {
+    setCart((prev) => ({
+      ...prev,
+      packageItems: prev.packageItems.filter((p) => p.id !== packageItemId),
+    }))
+  }, [])
+
+  const updatePackageItemNotes = useCallback((packageItemId: string, notes: string) => {
+    setCart((prev) => ({
+      ...prev,
+      packageItems: prev.packageItems.map((p) =>
+        p.id === packageItemId ? { ...p, notes } : p
+      ),
+    }))
+  }, [])
+
   const getSubtotal = useCallback(() => {
-    return cart.items.reduce((total, item) => {
+    const itemsTotal = (cart.items || []).reduce((total, item) => {
       if (item.pricingType === 'per_person' && item.guestCount) {
         return total + item.price * item.guestCount * item.quantity
       }
       return total + item.price * item.quantity
     }, 0)
-  }, [cart.items])
+
+    const packagesTotal = (cart.packageItems || []).reduce((total, pkg) => total + pkg.total, 0)
+
+    return itemsTotal + packagesTotal
+  }, [cart.items, cart.packageItems])
 
   const getItemCount = useCallback(() => {
-    return cart.items.reduce((count, item) => count + item.quantity, 0)
-  }, [cart.items])
+    const menuItemCount = (cart.items || []).reduce((count, item) => count + item.quantity, 0)
+    const packageItemCount = (cart.packageItems || []).length
+    return menuItemCount + packageItemCount
+  }, [cart.items, cart.packageItems])
 
   return {
     cart,
@@ -165,6 +267,9 @@ export function useCart() {
     updateItemNotes,
     updateItemGuestCount,
     removeItem,
+    addPackageToCart,
+    removePackageItem,
+    updatePackageItemNotes,
     setFulfillmentType,
     setScheduledDate,
     setScheduledTime,

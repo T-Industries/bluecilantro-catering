@@ -410,9 +410,10 @@ npx prisma db seed
 ```
 
 ### Email not sending
-- Check `SMTP2GO_API_KEY` is set
+- Check `SMTP2GO_API_KEY` is set (if not set, emails log to console instead)
 - Verify sender email domain in SMTP2Go dashboard
 - Check console logs for errors (emails log to console in dev mode)
+- **For Stripe orders:** Emails are sent after payment authorization, not at checkout. See "Email System" section below.
 
 ---
 
@@ -448,6 +449,44 @@ return NextResponse.json(item)
 NEXT_PUBLIC_APP_URL=https://yourdomain.com
 ```
 
+### Cart Context vs Hook
+
+**Problem:** Using `useCart()` directly creates a new isolated cart state. Changes made in one component won't reflect in others.
+
+**Solution:** Always use `useCartContext()` from `CartProvider` to share cart state across components:
+
+```typescript
+// WRONG - creates isolated state
+import { useCart } from '@/hooks/useCart'
+const { addPackageToCart } = useCart()
+
+// CORRECT - uses shared context
+import { useCartContext } from '@/components/CartProvider'
+const { addPackageToCart } = useCartContext()
+```
+
+**When this matters:**
+- Package configurator pages adding items to cart
+- Any component that needs to read/write cart state
+- The `useCart` hook is only used internally by `CartProvider`
+
+### Package Upgrades Field Name
+
+**Problem:** Package upgrades use `pricePerPerson` in Prisma schema, but API might accidentally use `price`.
+
+**Solution:** When creating/updating package upgrades, always map `body.price` to `pricePerPerson`:
+
+```typescript
+// In API route
+const upgrade = await prisma.packageUpgrade.create({
+  data: {
+    packageId: params.id,
+    name: body.name,
+    pricePerPerson: body.price,  // NOT price: body.price
+  },
+})
+```
+
 ### Email Timing with Payments
 
 **Problem:** Sending confirmation emails before payment is completed leads to confusion if payment fails.
@@ -456,11 +495,282 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com
 
 ---
 
+## Email System
+
+### Email Flow Architecture
+
+Order emails are sent at different times depending on the checkout method:
+
+```
+STRIPE CHECKOUT (Production):
+1. Customer submits checkout → Order created (paymentStatus: pending)
+2. Customer completes Stripe payment
+3. Stripe sends webhook (checkout.session.completed)
+4. Webhook handler updates order (paymentStatus: authorized)
+5. Webhook handler sends emails ← EMAILS SENT HERE
+6. Customer sees success page
+
+BYPASS CHECKOUT (Testing with TEST_BYPASS_CODE):
+1. Customer submits checkout with promo code
+2. Order created (paymentStatus: test_bypass)
+3. Emails sent immediately ← EMAILS SENT HERE
+4. Redirect to success page
+```
+
+### Email Types
+
+| Email | Recipient | Trigger | Purpose |
+|-------|-----------|---------|---------|
+| Order Notification | Admin | Payment authorized | Alert restaurant of new order |
+| Customer Confirmation | Customer | Payment authorized | Confirm order received |
+| Order Confirmed | Customer + Admin | Admin confirms order | Payment captured, order confirmed |
+| Order Completed | Customer + Admin | Admin marks complete | Thank customer, confirm completion |
+| Order Cancelled | Customer + Admin | Admin cancels order | Authorization released |
+
+### Local Development Without Webhooks
+
+**Problem:** Stripe webhooks can't reach `localhost`. Without `stripe listen`, the webhook never fires and emails never send.
+
+**Solutions:**
+
+1. **Use Test Bypass Code** (Easiest)
+   - Set `TEST_BYPASS_CODE` in `.env.local`
+   - Enter this code in the "Promo Code" field during checkout
+   - Skips Stripe entirely, sends emails immediately
+
+2. **Use Stripe CLI** (Full testing)
+   ```bash
+   stripe login
+   stripe listen --forward-to localhost:3000/api/webhooks/stripe
+   ```
+
+3. **Fallback Mechanism** (Automatic)
+   - `/api/checkout/session` has a built-in fallback
+   - When success page loads, it checks if order is still "pending"
+   - If so, queries Stripe directly to verify payment status
+   - If paid, updates order and sends emails
+   - This works without `stripe listen` running
+
+### Console Logging (Dev Mode)
+
+When `SMTP2GO_API_KEY` is not set, emails are logged to the terminal instead of being sent:
+
+```
+============================================================
+ORDER NOTIFICATION EMAIL (SMTP2Go not configured)
+============================================================
+To: gpwc@bluecilantro.ca
+Subject: New Catering Order - abc12345
+------------------------------------------------------------
+[Full email content displayed here]
+============================================================
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/lib/email.ts` | Email formatting and SMTP2Go API calls |
+| `src/app/api/webhooks/stripe/route.ts` | Primary email trigger (webhook) |
+| `src/app/api/checkout/route.ts` | Bypass order emails |
+| `src/app/api/checkout/session/route.ts` | Fallback email trigger (success page) |
+
+### Settings That Affect Emails
+
+| Setting Key | Default | Purpose |
+|-------------|---------|---------|
+| `notification_email` | gpwc@bluecilantro.ca | Where admin notifications go |
+| `send_customer_emails` | true | Toggle customer confirmation emails |
+| `business_name` | BlueCilantro | Shown in email headers |
+| `business_phone` | - | Shown in email footers |
+
+---
+
+## In Progress: Dual Menu System (Standard + Package)
+
+### Background
+
+The current menu system only supports "Standard Menu" (categories with individually priced items). A new "Package Menu" system is needed to support catering packages like the reference design in `bowling_stones.pdf`.
+
+**Reference:** `bowling_stones.pdf` in project root shows:
+- "Select & Choose Package" - Pick a tier ($29 or $45 PP), select items from each category
+- "Canapés Menu" - Items priced by quantity (Half Dozen $12, Full Dozen $21)
+- "Premium Upgrades" - Optional add-ons (Prime Beef +$19, Salmon +$14)
+- Badges like "MOST POPULAR"
+
+### All Decisions (Finalized)
+
+| Question | Answer |
+|----------|--------|
+| Both menu types available simultaneously? | **No** - Customer chooses Standard OR Package, then proceeds. Back button to re-choose. |
+| Multiple package types on Package page? | **Yes** - Browse multiple packages (Select & Choose, Canapés, Desserts) |
+| Multiple packages in cart? | **Yes** - All types can coexist in same cart |
+| Guest count | **Per package** (Selection type only) |
+| Minimum guests | **Per package** (e.g., "Select & Choose" min 10 guests) |
+| Canapés - pricing model | **Per item type** - different items can have different tier prices |
+| Canapés - multiple quantities | **Yes** - Meatballs × 3 (Full Dozen) = $63 |
+| Canapés - minimum order | **No minimum** |
+| Selection - same item twice | **Yes** - Can pick Caesar Salad × 2 for "Choose of Two" |
+| Selection - multiple packages | **Yes** - Admin can create multiple selection packages |
+| Fixed price - multiple items | **Yes** - Desserts $50, Fruit $35, etc. |
+| Upgrades | **Per person** (10 guests × $19 = $190) |
+| Badges ("MOST POPULAR") | **Admin manually sets** |
+| After add to cart | **Return to package list** to browse more |
+
+### Package Types
+
+| Type | Example | Customer Flow | Pricing Formula |
+|------|---------|---------------|-----------------|
+| **Selection** | Select & Choose | Pick tier → Select items from categories → Enter guests → Add upgrades | `(Tier × Guests) + (Upgrades × Guests)` |
+| **Quantity** | Canapés | Pick item → See tier prices → Pick tier → Enter quantity → Add | `Item Tier Price × Quantity` |
+| **Fixed** | Desserts Platter | Pick item → Enter quantity → Add | `Item Price × Quantity` |
+
+### Database Schema (Final)
+
+```prisma
+model MenuPackage {
+  id           String   @id @default(uuid())
+  name         String   // "Select & Choose", "Canapés Menu"
+  description  String?
+  type         String   // "selection", "quantity", "fixed"
+  imageUrl     String?  @map("image_url")
+  badge        String?  // "MOST POPULAR", "NEW", etc.
+  minGuests    Int?     @map("min_guests")  // For selection type
+  active       Boolean  @default(true)
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tiers      PackageTier[]
+  categories PackageCategory[]  // For selection type
+  items      PackageItem[]      // For quantity & fixed types
+  upgrades   PackageUpgrade[]   // For selection type
+
+  @@map("menu_packages")
+}
+
+model PackageTier {
+  id           String      @id @default(uuid())
+  packageId    String      @map("package_id")
+  package      MenuPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  name         String      // "Choose of One", "Half Dozen"
+  description  String?
+  selectCount  Int?        @map("select_count")  // Selection type: items per category
+  price        Decimal     @db.Decimal(10, 2)    // Selection: per person, Quantity: default
+  active       Boolean     @default(true)
+  displayOrder Int         @default(0) @map("display_order")
+
+  @@map("package_tiers")
+}
+
+model PackageCategory {
+  id           String      @id @default(uuid())
+  packageId    String      @map("package_id")
+  package      MenuPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  name         String      // "Salads", "Vegetables"
+  description  String?
+  imageUrl     String?     @map("image_url")
+  active       Boolean     @default(true)
+  displayOrder Int         @default(0) @map("display_order")
+  items        PackageCategoryItem[]
+
+  @@map("package_categories")
+}
+
+model PackageCategoryItem {
+  id           String          @id @default(uuid())
+  categoryId   String          @map("category_id")
+  category     PackageCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name         String          // "Caesar Salad"
+  description  String?
+  active       Boolean         @default(true)
+  displayOrder Int             @default(0) @map("display_order")
+
+  @@map("package_category_items")
+}
+
+model PackageItem {
+  id           String      @id @default(uuid())
+  packageId    String      @map("package_id")
+  package      MenuPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  name         String      // "Meatballs", "Assorted Desserts Platter"
+  description  String?
+  imageUrl     String?     @map("image_url")
+  price        Decimal?    @db.Decimal(10, 2)  // Fixed type: item price
+  tierPrices   Json?       @map("tier_prices") // Quantity type: {"tierId": "12.00"}
+  badge        String?     // "MOST POPULAR"
+  active       Boolean     @default(true)
+  displayOrder Int         @default(0) @map("display_order")
+
+  @@map("package_items")
+}
+
+model PackageUpgrade {
+  id             String      @id @default(uuid())
+  packageId      String      @map("package_id")
+  package        MenuPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  name           String      // "Prime Beef"
+  description    String?
+  pricePerPerson Decimal     @map("price_per_person") @db.Decimal(10, 2)
+  active         Boolean     @default(true)
+  displayOrder   Int         @default(0) @map("display_order")
+
+  @@map("package_upgrades")
+}
+```
+
+### Customer Flow
+
+```
+Home Page: "How would you like to order?"
+    │
+    ├── [À La Carte] ──→ Standard Menu (current functionality)
+    │
+    └── [Packages] ──→ Package List
+                           │
+                           ├── Select & Choose ──→ Configure (tier, selections, guests, upgrades)
+                           │                              └──→ Add to Cart ──→ Back to Package List
+                           │
+                           ├── Canapés ──→ Browse items, each has tier/qty selector
+                           │                    └──→ Add to Cart (per item) ──→ Stay on page
+                           │
+                           └── Desserts ──→ Browse items, each has qty selector
+                                               └──→ Add to Cart (per item) ──→ Stay on page
+```
+
+### Implementation Phases
+
+| Phase | Description | Complexity |
+|-------|-------------|------------|
+| 1 | Add Edit functionality for existing standard menu items | Low |
+| 2 | Database schema for packages (Prisma migration) | Medium |
+| 3 | API endpoints for packages CRUD | Medium |
+| 4 | Admin UI - Package list and type selection | Medium |
+| 5 | Admin UI - Selection package editor (tiers, categories, items, upgrades) | High |
+| 6 | Admin UI - Quantity package editor (tiers, items with prices) | Medium |
+| 7 | Admin UI - Fixed package editor (items with prices) | Low |
+| 8 | Customer UI - Menu type selection | Low |
+| 9 | Customer UI - Package list | Low |
+| 10 | Customer UI - Selection package configurator | High |
+| 11 | Customer UI - Quantity package configurator | Medium |
+| 12 | Customer UI - Fixed package configurator | Low |
+| 13 | Cart integration for all package types | High |
+| 14 | Checkout & order storage for packages | Medium |
+| 15 | Order display (admin & confirmation) for packages | Medium |
+
+### Current Admin Menu Gaps
+
+- **Edit button for items** - Can only hide/show/delete, not edit name/description/price
+- **Package management** - No UI for creating/managing packages
+
+---
+
 ## Future Enhancements
 
 - [x] Stripe payment integration (with manual capture)
 - [x] Customer order tracking page (`/track`)
 - [x] Automatic Canadian tax calculation (Stripe Tax)
+- [ ] **Dual Menu System (Standard + Package)** - IN PROGRESS
 - [ ] SMS notifications (Twilio)
 - [ ] Recurring orders
 - [ ] Inventory management

@@ -34,6 +34,48 @@ export type CartItem = {
   imageUrl?: string
 }
 
+// Package cart item for selection packages
+export type PackageCartItemSelection = {
+  id: string // Unique cart item ID
+  type: 'package_selection'
+  packageId: string
+  packageName: string
+  tierId: string
+  tierName: string
+  tierPrice: number
+  guestCount: number
+  selections: {
+    categoryId: string
+    categoryName: string
+    items: { id: string; name: string }[]
+  }[]
+  upgrades: {
+    id: string
+    name: string
+    pricePerPerson: number
+  }[]
+  total: number
+  notes?: string
+}
+
+// Package cart item for quantity/fixed packages
+export type PackageCartItemQuantity = {
+  id: string // Unique cart item ID
+  type: 'package_quantity' | 'package_fixed'
+  packageId: string
+  packageName: string
+  itemId: string
+  itemName: string
+  tierId?: string
+  tierName?: string
+  quantity: number
+  unitPrice: number
+  total: number
+  notes?: string
+}
+
+export type PackageCartItem = PackageCartItemSelection | PackageCartItemQuantity
+
 export type Cart = {
   items: CartItem[]
   fulfillmentType: 'delivery' | 'pickup'

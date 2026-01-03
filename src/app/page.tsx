@@ -1,29 +1,22 @@
 import { prisma } from '@/lib/db'
-import { MenuItemCard } from '@/components/menu/MenuItemCard'
 import { CartButton } from '@/components/menu/CartButton'
-
-async function getMenuData() {
-  const categories = await prisma.menuCategory.findMany({
-    where: { active: true },
-    orderBy: { displayOrder: 'asc' },
-    include: {
-      items: {
-        where: { active: true },
-        orderBy: { displayOrder: 'asc' },
-      },
-    },
-  })
-  return categories
-}
+import Link from 'next/link'
 
 async function getSettings() {
   const settings = await prisma.setting.findMany()
   return settings.reduce((acc, s) => ({ ...acc, [s.key]: s.value }), {} as Record<string, string>)
 }
 
+async function getPackageCount() {
+  const count = await prisma.menuPackage.count({
+    where: { active: true },
+  })
+  return count
+}
+
 export default async function HomePage() {
-  const categories = await getMenuData()
   const settings = await getSettings()
+  const packageCount = await getPackageCount()
 
   return (
     <div className="min-h-screen">
@@ -50,63 +43,84 @@ export default async function HomePage() {
           <p className="text-xl text-gray-200 mb-8">
             From intimate gatherings to large events, we bring authentic flavors to your table.
           </p>
-          <a
-            href="#menu"
-            className="inline-block bg-accent text-white px-8 py-3 rounded-lg font-semibold hover:bg-amber-600 transition-colors"
-          >
-            View Our Menu
-          </a>
         </div>
       </section>
 
-      {/* Menu Section */}
-      <main id="menu" className="max-w-7xl mx-auto px-4 py-12">
-        <h2 className="text-3xl font-bold text-center mb-8">Our Menu</h2>
+      {/* Menu Type Selection */}
+      <main className="max-w-4xl mx-auto px-4 py-16">
+        <h2 className="text-3xl font-bold text-center mb-4">How would you like to order?</h2>
         <p className="text-center text-gray-600 mb-12">
-          * Prices do not include taxes. Final amount will be confirmed upon order.
+          Choose from our individual items or select a catering package for your event.
         </p>
 
-        {categories.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">
-              Menu is being prepared. Please check back soon!
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-12">
-            {categories.map((category) => (
-              <section key={category.id}>
-                <h3 className="text-2xl font-bold text-primary mb-6 pb-2 border-b-2 border-primary">
-                  {category.name}
-                </h3>
-                {category.items.length === 0 ? (
-                  <p className="text-gray-500">No items available in this category.</p>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {category.items.map((item) => (
-                      <MenuItemCard
-                        key={item.id}
-                        item={{
-                          id: item.id,
-                          name: item.name,
-                          description: item.description,
-                          price: parseFloat(item.price.toString()),
-                          pricingType: item.pricingType,
-                          servesCount: item.servesCount,
-                          imageUrl: item.imageUrl,
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
-            ))}
-          </div>
-        )}
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* A La Carte Option */}
+          <Link
+            href="/menu/standard"
+            className="group block bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow border-2 border-transparent hover:border-primary"
+          >
+            <div className="h-48 bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center">
+              <span className="text-6xl">🍽️</span>
+            </div>
+            <div className="p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-primary transition-colors">
+                A La Carte Menu
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Order individual items from our full menu. Perfect for smaller gatherings or custom selections.
+              </p>
+              <div className="flex items-center text-primary font-medium">
+                Browse Menu
+                <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </div>
+          </Link>
+
+          {/* Packages Option */}
+          <Link
+            href="/menu/packages"
+            className={`group block bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow border-2 border-transparent hover:border-primary ${
+              packageCount === 0 ? 'opacity-60 pointer-events-none' : ''
+            }`}
+          >
+            <div className="h-48 bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center relative">
+              <span className="text-6xl">📦</span>
+              {packageCount > 0 && (
+                <span className="absolute top-4 right-4 bg-accent text-white text-sm px-3 py-1 rounded-full font-medium">
+                  {packageCount} Package{packageCount !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <div className="p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-2 group-hover:text-primary transition-colors">
+                Catering Packages
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {packageCount > 0
+                  ? 'Pre-designed packages with tier-based pricing. Great for larger events with per-person pricing.'
+                  : 'Packages coming soon! Check back later for our catering package options.'}
+              </p>
+              {packageCount > 0 && (
+                <div className="flex items-center text-primary font-medium">
+                  View Packages
+                  <svg className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              )}
+            </div>
+          </Link>
+        </div>
+
+        <p className="text-center text-sm text-gray-500 mt-8">
+          * You can add items from both menus to your cart
+        </p>
       </main>
 
       {/* Footer */}
-      <footer className="bg-gray-800 text-white py-8">
+      <footer className="bg-gray-800 text-white py-8 mt-auto">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <p className="text-lg font-semibold">{settings.business_name || 'BlueCilantro'}</p>
           {settings.business_phone && <p className="mt-2">{settings.business_phone}</p>}
