@@ -417,7 +417,130 @@ npx prisma db seed
 
 ---
 
+## Security Checklist
+
+Regularly review the codebase for common security vulnerabilities. Use this checklist during development and before deployment.
+
+### Critical Security Checks
+
+1. **Hardcoded Secrets**
+   ```bash
+   # Search for potential hardcoded secrets
+   grep -r "API_KEY\|SECRET\|PASSWORD\|TOKEN" --include="*.ts" --include="*.js"
+   ```
+   - ✅ All secrets in environment variables
+   - ✅ No secrets committed to git
+   - ✅ `.env` files in `.gitignore`
+
+2. **Security Headers** (`next.config.js`)
+   - ✅ X-Frame-Options (prevent clickjacking)
+   - ✅ X-Content-Type-Options (prevent MIME sniffing)
+   - ✅ Content-Security-Policy (restrict resource loading)
+   - ✅ X-XSS-Protection
+   - ✅ Referrer-Policy
+   - ✅ Permissions-Policy
+
+3. **Image & Resource Configuration**
+   - ✅ Restrict `remotePatterns` to trusted CDNs only
+   - ❌ Never use wildcard `hostname: '**'` (SSRF risk)
+
+4. **SQL Injection Prevention**
+   - ✅ Always use Prisma ORM (parameterized queries)
+   - ❌ Never use string interpolation in raw SQL
+   - ❌ Never use `${}` in SQL queries
+
+5. **XSS Prevention**
+   - ✅ React escapes by default
+   - ❌ Avoid `dangerouslySetInnerHTML`
+   - ❌ Never set `innerHTML` directly
+   - ✅ Sanitize user input if HTML rendering needed
+
+6. **Authentication & Sessions**
+   - ✅ httpOnly cookies (prevent XSS cookie theft)
+   - ✅ secure flag in production
+   - ✅ sameSite: 'lax' (CSRF protection)
+   - ✅ bcrypt for password hashing (cost factor 12+)
+   - ✅ JWT tokens with proper expiration
+
+7. **Rate Limiting** ⚠️ TODO
+   - ⚠️ Login endpoint needs rate limiting (brute force risk)
+   - ⚠️ Password setup endpoint needs rate limiting
+   - ⚠️ Consider implementing account lockout
+
+8. **Input Validation**
+   - ✅ Validate all API inputs (email format, required fields)
+   - ✅ Sanitize file uploads (if implemented)
+   - ✅ Password strength requirements (min 8 chars)
+
+9. **Error Handling**
+   - ✅ Generic error messages to clients (no stack traces)
+   - ✅ Detailed logs server-side only
+   - ❌ Never expose database errors to users
+
+10. **Dependency Security**
+    ```bash
+    # Check for vulnerabilities
+    npm audit
+    npm audit fix
+    ```
+
+### Security Testing Commands
+
+```bash
+# Search for common security issues
+grep -r "dangerouslySetInnerHTML" --include="*.tsx" --include="*.ts"
+grep -r "innerHTML\s*=" --include="*.tsx" --include="*.ts"
+grep -r "eval(" --include="*.ts" --include="*.js"
+grep -r "process.env" --include="*.ts" --include="*.js"
+
+# Check for exposed secrets
+git log -p | grep -i "api_key\|secret\|password"
+```
+
+### Recent Security Fixes
+
+| Date | Issue | Fix | Severity |
+|------|-------|-----|----------|
+| 2026-01-04 | Missing security headers | Added CSP, X-Frame-Options, etc. in `next.config.js` | High |
+| 2026-01-04 | Overly permissive image sources | Restricted to trusted CDNs only | Medium |
+
+---
+
 ## Best Practices / Common Pitfalls
+
+### Todo List Management
+
+When working on complex tasks, use the TodoWrite tool to track progress:
+
+**When to use todos:**
+- Multi-step features (3+ steps)
+- Complex bug fixes requiring investigation
+- Deployment tasks with multiple phases
+- Security audits with multiple checks
+
+**Best practices:**
+```typescript
+// 1. Create todos at start of complex task
+TodoWrite([
+  { content: "Investigate root cause", activeForm: "Investigating root cause", status: "in_progress" },
+  { content: "Fix the issue", activeForm: "Fixing the issue", status: "pending" },
+  { content: "Write tests", activeForm: "Writing tests", status: "pending" },
+  { content: "Update documentation", activeForm: "Updating documentation", status: "pending" }
+])
+
+// 2. Mark complete immediately after finishing each step
+TodoWrite([
+  { content: "Investigate root cause", activeForm: "Investigating root cause", status: "completed" },
+  { content: "Fix the issue", activeForm: "Fixing the issue", status: "in_progress" },
+  // ...
+])
+```
+
+**Rules:**
+- Only ONE task `in_progress` at a time
+- Mark tasks `completed` immediately when done
+- Update todos in real-time, not in batches
+- Remove irrelevant tasks entirely
 
 ### Next.js App Router Cache Revalidation
 
